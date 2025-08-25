@@ -66,7 +66,7 @@ public:
 
   /**
    * @brief Return the current position of the gripper.
-   * @throw serial::IOException on failure to successfully communicate with gripper port
+   * @throw std::exception on failure to successfully communicate with gripper port
    * @return uint8_t A value between 0x00 (fully open) and 0xFF (fully closed).
    */
   uint16_t get_gripper_position() override;
@@ -106,7 +106,7 @@ private:
   /**
    * @brief Read the current status of the gripper, and update member variables as appropriate.
    *
-   * @throw serial::IOException on failure to successfully communicate with gripper port
+   * @throw std::exception on failure to successfully communicate with gripper port
    */
   void update_status();
 

@@ -40,7 +40,6 @@
 
 #include <rclcpp/rclcpp.hpp>
 
-#include <serial/serial.h>
 
 const auto kLogger = rclcpp::get_logger("DHGripperHardwareInterface");
 
@@ -135,7 +134,7 @@ hardware_interface::CallbackReturn DHGripperHardwareInterface::on_init(const har
   {
     driver_ = driver_factory_->create(info_);
   }
-  catch (const std::exception& e)
+  catch (const std::runtime_error& e)
   {
     RCLCPP_FATAL(kLogger, "Failed to create a driver: %s", e.what());
     return CallbackReturn::ERROR;
@@ -170,7 +169,7 @@ DHGripperHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
           std::this_thread::sleep_for(std::chrono::seconds(1));
         }
       }
-      catch (const serial::IOException& e)
+      catch (const std::runtime_error& e)
       {
         RCLCPP_WARN(kLogger, "IOException while connecting to the DH gripper: %s, retrying...", e.what());
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -184,7 +183,7 @@ DHGripperHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
       return CallbackReturn::ERROR;
     }
   }
-  catch (const std::exception& e)
+  catch (const std::runtime_error& e)
   {
     RCLCPP_ERROR(kLogger, "General exception while configuring the DH gripper: %s", e.what());
     return CallbackReturn::ERROR;
@@ -258,7 +257,7 @@ DHGripperHardwareInterface::on_activate(const rclcpp_lifecycle::State& /*previou
     communication_thread_is_running_.store(true);
     communication_thread_ = std::thread([this] { this->background_task(); });
   }
-  catch (const std::exception& e)
+  catch (const std::runtime_error& e)
   {
     RCLCPP_FATAL(kLogger, "Failed to communicate with the DH gripper: %s", e.what());
     return CallbackReturn::ERROR;
@@ -284,7 +283,7 @@ DHGripperHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& /*previ
   {
     driver_->deactivate();
   }
-  catch (const std::exception& e)
+  catch (const std::runtime_error& e)
   {
     RCLCPP_ERROR(kLogger, "Failed to deactivate the DH gripper: %s", e.what());
     return CallbackReturn::ERROR;
@@ -297,7 +296,7 @@ hardware_interface::return_type DHGripperHardwareInterface::read(const rclcpp::T
                                                                       const rclcpp::Duration& /*period*/)
 {
   gripper_position_ = gripper_closed_pos_ * (kGripperMaxPos - gripper_current_state_.load()) / kGripperRangePos;
-
+  // RCLCPP_INFO(kLogger, (std::string("Gripper pos")+std::to_string(gripper_position_)).c_str());
   // print in dec
 
   if (!std::isnan(reactivate_gripper_cmd_))
@@ -356,7 +355,7 @@ void DHGripperHardwareInterface::background_task()
       // Read the state of the gripper.
       gripper_current_state_.store(this->driver_->get_gripper_position());
     }
-    catch (std::exception& e)
+    catch (std::runtime_error& e)
     {
       RCLCPP_ERROR(kLogger, "Error: %s", e.what());
     }

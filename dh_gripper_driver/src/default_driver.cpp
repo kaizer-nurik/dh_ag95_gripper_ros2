@@ -26,7 +26,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <serial/serial.h>
+
 
 #include <chrono>
 #include <iostream>
@@ -74,7 +74,7 @@ std::vector<uint8_t> DefaultDriver::send(const std::vector<uint8_t>& request, si
       response = serial_->read(response_size);
       break;
     }
-    catch (const serial::IOException& e)
+    catch (const std::runtime_error& e)
     {
       RCLCPP_WARN(kLogger, "Resending the command because the previous attempt (%d of %d) failed: %s", retry_count + 1,
                   kMaxRetries, e.what());

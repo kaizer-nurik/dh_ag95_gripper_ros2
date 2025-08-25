@@ -26,86 +26,179 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-#include <serial/serial.h>
+#include "serial_driver/serial_driver.hpp"
 
 #include <dh_gripper_driver/default_serial.hpp>
+#include <condition_variable>
+#include <mutex>
+#include <chrono>
+#include <system_error>
+#include <vector>
+#include <iostream>
+
+#include <boost/asio/buffer.hpp>
 
 namespace dh_gripper_driver
 {
 
-DefaultSerial::DefaultSerial() : serial_{ std::make_unique<serial::Serial>() }
+DefaultSerial::DefaultSerial() 
 {
 }
 
 void DefaultSerial::open()
 {
-  serial_->open();
+  if (port){
+    ctx.waitForExit();
+    port.reset(); 
+  }
+  drivers::serial_driver::SerialPortConfig config(baud, fc, pt, sb);
+  static constexpr const char * dev_namez = "/dev/robot/dh_ag95_gripper";
+  std::cout<< "dev_name "<< dev_namez<<std::endl;
+  port = std::make_unique<drivers::serial_driver::SerialPort>(ctx, dev_namez, config);
+  port->open();
 }
 
 bool DefaultSerial::is_open() const
 {
-  return serial_->isOpen();
+  if(!port){
+    return false;
+  }
+  return port->is_open();
 }
 
 void DefaultSerial::close()
 {
-  serial_->close();
+  ctx.waitForExit();
+  port.reset(); 
+  port->close();
 }
 
 std::vector<uint8_t> DefaultSerial::read(size_t size)
 {
-  std::vector<uint8_t> data;
-  size_t bytes_read = serial_->read(data, size);
+  return read_with_timeout(size, timeout_ms);
+  std::vector<uint8_t> data(size);
+  data.resize(size);
+  size_t bytes_read = port->receive(data);
   if (bytes_read != size)
   {
     const auto error_msg = "Requested " + std::to_string(size) + " bytes, but got " + std::to_string(bytes_read);
-    THROW(serial::IOException, error_msg.c_str());
+    throw std::runtime_error(error_msg);
   }
   return data;
 }
 
 void DefaultSerial::write(const std::vector<uint8_t>& data)
 {
-  std::size_t num_bytes_written = serial_->write(data);
-  serial_->flush();
+  std::size_t num_bytes_written = port->send(data);
   if (num_bytes_written != data.size())
   {
     const auto error_msg =
         "Attempted to write " + std::to_string(data.size()) + " bytes, but wrote " + std::to_string(num_bytes_written);
-    THROW(serial::IOException, error_msg.c_str());
+    throw std::runtime_error(error_msg);
   }
 }
 
-void DefaultSerial::set_port(const std::string& port)
+
+void DefaultSerial::set_port(const std::string& port_name)
 {
-  serial_->setPort(port);
+  dev_name = (char*)port_name.c_str();
 }
 
 std::string DefaultSerial::get_port() const
 {
-  return serial_->getPort();
+  return dev_name;
 }
 
 void DefaultSerial::set_timeout(std::chrono::milliseconds timeout)
 {
-  serial::Timeout simple_timeout = serial::Timeout::simpleTimeout(static_cast<uint32_t>(timeout.count()));
-  serial_->setTimeout(simple_timeout);
+  timeout_ms = timeout;
 }
 
 std::chrono::milliseconds DefaultSerial::get_timeout() const
 {
-  uint32_t timeout = serial_->getTimeout().read_timeout_constant;
-  return std::chrono::milliseconds{ timeout };
+  
+  return timeout_ms;
 }
 
 void DefaultSerial::set_baudrate(uint32_t baudrate)
 {
-  serial_->setBaudrate(baudrate);
+  baud = baudrate;
 }
 
 uint32_t DefaultSerial::get_baudrate() const
 {
-  return serial_->getBaudrate();
+  return baud;
 }
+
+//-----------------------------------------------------------------------------
+// read_with_timeout: uses SerialPort::async_receive(Functor)
+// Functor signature is: std::function<void(std::vector<uint8_t>&, const size_t&)>
+// -----------------------------------------------------------------------------
+std::vector<uint8_t>
+DefaultSerial::read_with_timeout(std::size_t size, std::chrono::milliseconds timeout)
+{
+  if (!port || !port->is_open()) {
+    throw std::runtime_error("read_with_timeout(): serial port is not open");
+  }
+  if (size == 0) {
+    return {};
+  }
+
+  std::vector<uint8_t> out(size);
+
+  const auto deadline = std::chrono::steady_clock::now() + timeout;
+
+  std::mutex mtx;
+  std::condition_variable cv;
+
+  std::size_t offset = 0;
+
+  while (offset < size) {
+    bool completed = false;
+    std::size_t got = 0;
+    std::error_code ec; // (SerialPort async functor doesn’t give EC, we keep this for uniformity)
+
+    // Arm ONE async receive; handler copies into the output and signals.
+    port->async_receive(
+      [&](std::vector<uint8_t>& buff, const size_t& nbytes)
+      {
+        // Copy as much as we still need
+        std::lock_guard<std::mutex> lk(mtx);
+        got = std::min(nbytes, size - offset);
+        if (got > 0) {
+          std::memcpy(out.data() + offset, buff.data(), got);
+          offset += got;
+        }
+        completed = true;
+        cv.notify_one();
+      }
+    );
+
+    std::unique_lock<std::mutex> lk(mtx);
+
+    // Wait until this chunk completes or the overall deadline hits
+    if (!cv.wait_until(lk, deadline, [&]{ return completed; })) {
+      // Timeout -> abort the inflight async op the only way we can
+      lk.unlock();
+      try {
+        // If your SerialPort exposes cancel(), prefer that:
+        // port->cancel();
+        if (port->is_open()) {
+          port->close();
+        }
+      } catch (...) {}
+      throw std::system_error(std::make_error_code(std::errc::timed_out),
+                              "read_with_timeout(): timed out");
+    }
+
+    // Defensive: prevent infinite loop
+    if (got == 0) {
+      throw std::runtime_error("read_with_timeout(): async_receive returned 0 bytes");
+    }
+  }
+
+  return out;
+}
+
 
 }  // namespace dh_gripper_driver

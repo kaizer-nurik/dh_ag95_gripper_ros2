@@ -13,7 +13,7 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
-find_package(serial REQUIRED)
+find_package(serial_driver REQUIRED)
 # uncomment the following section in order to fill in
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
@@ -24,7 +24,7 @@ set(THIS_PACKAGE_INCLUDE_DEPENDS
   pluginlib
   rclcpp
   rclcpp_lifecycle
-  serial
+  serial_driver
 )
 
 
@@ -76,7 +76,7 @@ ament_export_dependencies(
   pluginlib
   rclcpp
   rclcpp_lifecycle
-  serial
+  serial_driver
   ${THIS_PACKAGE_INCLUDE_DEPENDS}
 )
 

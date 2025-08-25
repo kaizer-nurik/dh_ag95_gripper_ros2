@@ -76,7 +76,7 @@ public:
    * @param data A vector containing data to be written to the serial port.
    * @throw serial::PortNotOpenedException
    * @throw serial::SerialException
-   * @throw serial::IOException
+   * @throw std::exception
    */
   virtual void write(const std::vector<uint8_t>& data) = 0;
 

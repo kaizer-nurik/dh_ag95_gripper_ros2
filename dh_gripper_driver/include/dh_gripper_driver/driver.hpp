@@ -75,13 +75,13 @@ public:
 
   /**
    * @brief Activates the gripper.
-   * @throw serial::IOException on failure to successfully communicate with gripper port
+   * @throw std::exception on failure to successfully communicate with gripper port
    */
   virtual void activate() = 0;
 
   /**
    * @brief Deactivates the gripper.
-   * @throw serial::IOException on failure to successfully communicate with gripper port
+   * @throw std::exception on failure to successfully communicate with gripper port
    */
   virtual void deactivate() = 0;
 
@@ -94,7 +94,7 @@ public:
   /**
    * @brief Return the current position of the gripper.
    *
-   * @throw serial::IOException on failure to successfully communicate with gripper port
+   * @throw std::exception on failure to successfully communicate with gripper port
    *
    * @return uint8_t A value between 0x00 (fully open) and 0xFF (fully closed).
    */
