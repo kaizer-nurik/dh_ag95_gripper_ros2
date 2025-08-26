@@ -52,9 +52,8 @@ void DefaultSerial::open()
     port.reset(); 
   }
   drivers::serial_driver::SerialPortConfig config(baud, fc, pt, sb);
-  static constexpr const char * dev_namez = "/dev/robot/dh_ag95_gripper";
-  std::cout<< "dev_name "<< dev_namez<<std::endl;
-  port = std::make_unique<drivers::serial_driver::SerialPort>(ctx, dev_namez, config);
+  
+  port = std::make_unique<drivers::serial_driver::SerialPort>(ctx, dev_name.c_str(), config);
   port->open();
 }
 
@@ -101,7 +100,7 @@ void DefaultSerial::write(const std::vector<uint8_t>& data)
 
 void DefaultSerial::set_port(const std::string& port_name)
 {
-  dev_name = (char*)port_name.c_str();
+  dev_name = port_name;
 }
 
 std::string DefaultSerial::get_port() const
@@ -164,6 +163,7 @@ DefaultSerial::read_with_timeout(std::size_t size, std::chrono::milliseconds tim
       {
         // Copy as much as we still need
         std::lock_guard<std::mutex> lk(mtx);
+        std::cout<<
         got = std::min(nbytes, size - offset);
         if (got > 0) {
           std::memcpy(out.data() + offset, buff.data(), got);

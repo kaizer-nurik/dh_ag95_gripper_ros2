@@ -27,6 +27,4 @@
         mock_sensor_commands="$(arg mock_sensor_commands)"
     />
 
-    <link name="world" />
-
 </robot>

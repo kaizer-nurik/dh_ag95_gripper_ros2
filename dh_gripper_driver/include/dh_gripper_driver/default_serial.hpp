@@ -75,7 +75,7 @@ public:
   read_with_timeout(std::size_t size, std::chrono::milliseconds timeout);
 
 private:
-  char * dev_name = "/dev/ttyS0";
+  std::string dev_name = "/dev/ttyS0";
   uint32_t baud = 115200;
   drivers::serial_driver::FlowControl fc = drivers::serial_driver::FlowControl::NONE;
   drivers::serial_driver::Parity pt = drivers::serial_driver::Parity::NONE;
