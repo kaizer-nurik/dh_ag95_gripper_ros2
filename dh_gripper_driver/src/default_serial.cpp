@@ -68,8 +68,8 @@ bool DefaultSerial::is_open() const
 void DefaultSerial::close()
 {
   ctx.waitForExit();
-  port.reset(); 
   port->close();
+  port.reset(); 
 }
 
 std::vector<uint8_t> DefaultSerial::read(size_t size)
@@ -144,57 +144,78 @@ DefaultSerial::read_with_timeout(std::size_t size, std::chrono::milliseconds tim
   }
 
   std::vector<uint8_t> out(size);
-
   const auto deadline = std::chrono::steady_clock::now() + timeout;
 
-  std::mutex mtx;
-  std::condition_variable cv;
+  struct State {
+    std::mutex m;
+    std::condition_variable cv;
+    bool completed{false};   // one async op finished
+    bool aborted{false};     // we timed out
+    std::size_t got{0};      // bytes obtained in this op
+  };
 
   std::size_t offset = 0;
 
   while (offset < size) {
-    bool completed = false;
-    std::size_t got = 0;
-    std::error_code ec; // (SerialPort async functor doesn’t give EC, we keep this for uniformity)
+    const std::size_t remaining = size - offset;
+    auto state = std::make_shared<State>();
 
-    // Arm ONE async receive; handler copies into the output and signals.
+    // Arm one async receive
     port->async_receive(
-      [&](std::vector<uint8_t>& buff, const size_t& nbytes)
+      [state, dst = out.data() + offset, remaining]
+      (std::vector<uint8_t>& buff, const size_t& nbytes)
       {
-        // Copy as much as we still need
-        std::lock_guard<std::mutex> lk(mtx);
-        std::cout<<
-        got = std::min(nbytes, size - offset);
-        if (got > 0) {
-          std::memcpy(out.data() + offset, buff.data(), got);
-          offset += got;
+        std::lock_guard<std::mutex> lk(state->m);
+
+        if (state->aborted) {
+          // We timed out; do not touch caller's stack buffers.
+          state->completed = true;
+          state->cv.notify_one();
+          return;
         }
-        completed = true;
-        cv.notify_one();
+
+        state->got = std::min(nbytes, remaining);
+        if (state->got) {
+          std::memcpy(dst, buff.data(), state->got);
+        }
+        state->completed = true;
+        state->cv.notify_one();
       }
     );
 
-    std::unique_lock<std::mutex> lk(mtx);
+    std::unique_lock<std::mutex> lk(state->m);
 
-    // Wait until this chunk completes or the overall deadline hits
-    if (!cv.wait_until(lk, deadline, [&]{ return completed; })) {
-      // Timeout -> abort the inflight async op the only way we can
+    // Wait for this read to finish or for the overall deadline
+    if (!state->cv.wait_until(lk, deadline, [&]{ return state->completed; })) {
+      // Timeout: prevent the handler from touching stack memory
+      state->aborted = true;
       lk.unlock();
+
       try {
-        // If your SerialPort exposes cancel(), prefer that:
+        // Prefer cancel() if available on your SerialPort
         // port->cancel();
         if (port->is_open()) {
           port->close();
         }
       } catch (...) {}
+
+      // Give the handler a chance to observe 'aborted' and exit
+      {
+        std::unique_lock<std::mutex> lk2(state->m);
+        state->cv.wait_for(lk2, std::chrono::milliseconds(10));
+      }
+
       throw std::system_error(std::make_error_code(std::errc::timed_out),
                               "read_with_timeout(): timed out");
     }
 
-    // Defensive: prevent infinite loop
-    if (got == 0) {
+    // Normal completion path
+    if (state->got == 0) {
+      // Defensive: avoid infinite loops on 0-byte completions
       throw std::runtime_error("read_with_timeout(): async_receive returned 0 bytes");
     }
+
+    offset += state->got;
   }
 
   return out;
