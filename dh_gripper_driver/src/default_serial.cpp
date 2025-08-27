@@ -191,19 +191,25 @@ DefaultSerial::read_with_timeout(std::size_t size, std::chrono::milliseconds tim
       state->aborted = true;
       lk.unlock();
 
-      try {
-        // Prefer cancel() if available on your SerialPort
-        // port->cancel();
-        if (port->is_open()) {
-          port->close();
-        }
-      } catch (...) {}
+      // try {
+      //   // Prefer cancel() if available on your SerialPort
+      //   // port->cancel();
+      //   if (port->is_open()) {
+      //     port->close();
+      //   }
+      // } catch (...) {}
 
       // Give the handler a chance to observe 'aborted' and exit
       {
         std::unique_lock<std::mutex> lk2(state->m);
         state->cv.wait_for(lk2, std::chrono::milliseconds(10));
       }
+
+      if (port->is_open()) {
+          port->close();
+        }
+      port->open();
+      
 
       throw std::system_error(std::make_error_code(std::errc::timed_out),
                               "read_with_timeout(): timed out");

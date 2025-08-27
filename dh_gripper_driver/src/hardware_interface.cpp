@@ -136,7 +136,7 @@ hardware_interface::CallbackReturn DHGripperHardwareInterface::on_init(const har
   {
     driver_ = driver_factory_->create(info_);
   }
-  catch (const std::runtime_error& e)
+  catch (const std::exception& e)
   {
     RCLCPP_FATAL(kLogger, "Failed to create a driver: %s", e.what());
     return CallbackReturn::ERROR;
@@ -172,7 +172,7 @@ DHGripperHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
           std::this_thread::sleep_for(std::chrono::seconds(1));
         }
       }
-      catch (const std::runtime_error& e)
+      catch (const std::exception& e)
       {
         RCLCPP_WARN(kLogger, "IOException while connecting to the DH gripper: %s, retrying...", e.what());
         std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -186,7 +186,7 @@ DHGripperHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
       return CallbackReturn::ERROR;
     }
   }
-  catch (const std::runtime_error& e)
+  catch (const std::exception& e)
   {
     RCLCPP_ERROR(kLogger, "General exception while configuring the DH gripper: %s", e.what());
     return CallbackReturn::ERROR;
@@ -260,7 +260,7 @@ DHGripperHardwareInterface::on_activate(const rclcpp_lifecycle::State& /*previou
     communication_thread_is_running_.store(true);
     communication_thread_ = std::thread([this] { this->background_task(); });
   }
-  catch (const std::runtime_error& e)
+  catch (const std::exception& e)
   {
     RCLCPP_FATAL(kLogger, "Failed to communicate with the DH gripper: %s", e.what());
     return CallbackReturn::ERROR;
@@ -286,7 +286,7 @@ DHGripperHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& /*previ
   {
     driver_->deactivate();
   }
-  catch (const std::runtime_error& e)
+  catch (const std::exception& e)
   {
     RCLCPP_ERROR(kLogger, "Failed to deactivate the DH gripper: %s", e.what());
     return CallbackReturn::ERROR;
@@ -358,7 +358,7 @@ void DHGripperHardwareInterface::background_task()
       // Read the state of the gripper.
       gripper_current_state_.store(this->driver_->get_gripper_position());
     }
-    catch (std::runtime_error& e)
+    catch (std::exception& e)
     {
       RCLCPP_ERROR(kLogger, "Error: %s", e.what());
     }

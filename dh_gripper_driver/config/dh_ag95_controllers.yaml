@@ -1,6 +1,6 @@
 controller_manager:
   ros__parameters:
-    update_rate: 500  # Hz
+    update_rate: 10  # Hz
     gripper_joint_state_broadcaster:
       type: joint_state_broadcaster/JointStateBroadcaster
     dh_ag95_gripper_controller:
