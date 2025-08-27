@@ -54,6 +54,8 @@ constexpr int kWriteResponseSize = 8;
 
 // If the gripper connection is not stable we may want to try sending the command again.
 constexpr auto kMaxRetries = 5;
+// Timeout for waiting gripper activation to complete
+constexpr auto kActivationTimeout = std::chrono::seconds(10);
 
 DefaultDriver::DefaultDriver(std::unique_ptr<Serial> serial)
   : serial_{ std::move(serial) }, commanded_gripper_speed_(0x80), commanded_gripper_force_(0x80)
@@ -118,14 +120,24 @@ void DefaultDriver::activate()
   {
     throw DriverException{ "Failed to activate the gripper." };
   }
+  RCLCPP_INFO(kLogger, "Activated!");
 
   update_status();
   if (activation_status_ == ActivationStatus::ACTIVE)
   {
     return;
   }
+  const auto activation_start_time = std::chrono::steady_clock::now();
   while (activation_status_ != ActivationStatus::ACTIVE)
   {
+    const auto elapsed = std::chrono::steady_clock::now() - activation_start_time;
+    if (elapsed > kActivationTimeout)
+    {
+      const auto timeout_ms = static_cast<long>(
+          std::chrono::duration_cast<std::chrono::milliseconds>(kActivationTimeout).count());
+      RCLCPP_FATAL(kLogger, "Gripper activation timed out after %ld ms", timeout_ms);
+      throw DriverException{ "Activation timed out." };
+    }
     std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     update_status();
   }

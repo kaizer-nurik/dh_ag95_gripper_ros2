@@ -7,7 +7,7 @@ from launch.substitutions import Command, FindExecutable, LaunchConfiguration, P
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
-from moveit_configs_utils import MoveItConfigsBuilder
+# from moveit_configs_utils import MoveItConfigsBuilder
 
 
 def generate_launch_description():
@@ -138,7 +138,7 @@ def generate_launch_description():
 
     # Active controllers
     active_list = [
-        "joint_state_broadcaster",
+        "gripper_joint_state_broadcaster",
         "forward_position_controller",
     ]
     active_spawners = [controller_spawner(controller) for controller in active_list]

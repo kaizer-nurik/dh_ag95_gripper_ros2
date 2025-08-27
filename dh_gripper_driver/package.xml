@@ -16,6 +16,8 @@
   <depend>rclcpp_lifecycle</depend>
   <depend>serial_driver</depend>
   <depend>asio_cmake_module</depend>
+  <depend>ros2_control</depend>
+  <depend>ros2_controllers</depend>
 
   <exec_depend>gripper_controllers</exec_depend>
   <exec_depend>joint_state_broadcaster</exec_depend>

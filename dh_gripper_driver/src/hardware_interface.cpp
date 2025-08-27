@@ -58,6 +58,7 @@ namespace dh_gripper_driver
 DHGripperHardwareInterface::DHGripperHardwareInterface()
 {
   driver_factory_ = std::make_unique<DefaultDriverFactory>();
+  RCLCPP_INFO(kLogger, "DHGripperHardwareInterface constructor");
 }
 
 DHGripperHardwareInterface::~DHGripperHardwareInterface()
@@ -73,6 +74,7 @@ DHGripperHardwareInterface::~DHGripperHardwareInterface()
 DHGripperHardwareInterface::DHGripperHardwareInterface(std::unique_ptr<DriverFactory> driver_factory)
   : driver_factory_{ std::move(driver_factory) }
 {
+  RCLCPP_INFO(kLogger, "DHGripperHardwareInterface test constructor");
 }
 
 hardware_interface::CallbackReturn DHGripperHardwareInterface::on_init(const hardware_interface::HardwareInfo& info)
@@ -129,7 +131,7 @@ hardware_interface::CallbackReturn DHGripperHardwareInterface::on_init(const har
       return CallbackReturn::ERROR;
     }
   }
-
+  
   try
   {
     driver_ = driver_factory_->create(info_);
@@ -140,6 +142,7 @@ hardware_interface::CallbackReturn DHGripperHardwareInterface::on_init(const har
     return CallbackReturn::ERROR;
   }
 
+  RCLCPP_INFO(kLogger, "DHGripperHardwareInterface on_init success");
   return CallbackReturn::SUCCESS;
 }
 
@@ -188,7 +191,7 @@ DHGripperHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
     RCLCPP_ERROR(kLogger, "General exception while configuring the DH gripper: %s", e.what());
     return CallbackReturn::ERROR;
   }
-
+  RCLCPP_INFO(kLogger, "DHGripperHardwareInterface on_configure success");
   return CallbackReturn::SUCCESS;
 }
 
