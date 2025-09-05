@@ -29,66 +29,111 @@
 #include "serial_driver/serial_driver.hpp"
 
 #include <dh_gripper_driver/default_serial.hpp>
-#include <condition_variable>
-#include <mutex>
 #include <chrono>
 #include <system_error>
 #include <vector>
 #include <iostream>
 
-#include <boost/asio/buffer.hpp>
+
 
 namespace dh_gripper_driver
 {
 
-DefaultSerial::DefaultSerial() 
+DefaultSerial::DefaultSerial()
 {
 }
 
+DefaultSerial::~DefaultSerial()
+{
+  if (is_open())
+  {
+    close();
+  }
+}
 void DefaultSerial::open()
 {
-  if (port){
-    ctx.waitForExit();
-    port.reset(); 
+
+  swri_serial_util::SerialConfig port_config(B115200,8,1,swri_serial_util::SerialConfig::Parity::NO_PARITY,false,false,true);
+  if (!port_.Open(dev_name,port_config)){
+    const auto error_msg = "PORT OPEN ERROR! " + port_.ErrorMsg();
+    throw std::runtime_error(error_msg);
+
   }
-  drivers::serial_driver::SerialPortConfig config(baud, fc, pt, sb);
-  
-  port = std::make_unique<drivers::serial_driver::SerialPort>(ctx, dev_name.c_str(), config);
-  port->open();
+
+  is_opened = true;
 }
 
 bool DefaultSerial::is_open() const
 {
-  if(!port){
-    return false;
-  }
-  return port->is_open();
+  return is_opened;
 }
 
 void DefaultSerial::close()
 {
-  ctx.waitForExit();
-  port->close();
-  port.reset(); 
+  port_.Close();
+  is_opened = false;
 }
 
 std::vector<uint8_t> DefaultSerial::read(size_t size)
 {
-  return read_with_timeout(size, timeout_ms);
-  std::vector<uint8_t> data(size);
-  data.resize(size);
-  size_t bytes_read = port->receive(data);
-  if (bytes_read != size)
+  std::vector<uint8_t> data;
+  
+  uint32_t ms32 = static_cast<uint32_t>(std::chrono::duration_cast<std::chrono::milliseconds>(timeout_ms).count());
+  swri_serial_util::SerialPort::Result res = port_.ReadBytes(data, size, ms32);
+
+  switch (res)
   {
-    const auto error_msg = "Requested " + std::to_string(size) + " bytes, but got " + std::to_string(bytes_read);
+  case swri_serial_util::SerialPort::Result::TIMEOUT:
+  {
+    const auto error_msg = "TIMEOUT READ ERROR!";
     throw std::runtime_error(error_msg);
+    break;
   }
+  case swri_serial_util::SerialPort::Result::INTERRUPTED:
+  {
+    const auto error_msg = "INTERRUPTED READ ERROR!";
+    throw std::runtime_error(error_msg);
+    break;
+  }
+  case swri_serial_util::SerialPort::Result::ERROR:
+  {
+    const auto error_msg = "READ ERROR!";
+    throw std::runtime_error(error_msg);
+    break;
+  }
+  default:
+    break;
+  }
+
+  // if (data.size() != size)
+  // {
+  //   const auto error_msg = "Requested " + std::to_string(size) + " bytes, but got " + std::to_string(data.size());
+  //   throw std::runtime_error(error_msg);
+  // }
+
+  //Try to fixx....
+  while (data.size()<size)
+  {
+    std::vector<uint8_t> data_chunk = this->read(size-data.size());
+    data.insert(data.end(), data_chunk.begin(), data_chunk.end());
+  }
+  
+
   return data;
 }
 
 void DefaultSerial::write(const std::vector<uint8_t>& data)
 {
-  std::size_t num_bytes_written = port->send(data);
+  
+  int32_t num_bytes_written = port_.Write(data);
+  int e = errno;  
+  std::string msg = std::system_category().message(e);
+
+  if (num_bytes_written == -1)
+  {
+    const auto error_msg = "WRITE ERROR "+ port_.ErrorMsg() + msg;
+    throw std::runtime_error(error_msg);
+  }
   if (num_bytes_written != data.size())
   {
     const auto error_msg =
@@ -127,104 +172,6 @@ void DefaultSerial::set_baudrate(uint32_t baudrate)
 uint32_t DefaultSerial::get_baudrate() const
 {
   return baud;
-}
-
-//-----------------------------------------------------------------------------
-// read_with_timeout: uses SerialPort::async_receive(Functor)
-// Functor signature is: std::function<void(std::vector<uint8_t>&, const size_t&)>
-// -----------------------------------------------------------------------------
-std::vector<uint8_t>
-DefaultSerial::read_with_timeout(std::size_t size, std::chrono::milliseconds timeout)
-{
-  if (!port || !port->is_open()) {
-    throw std::runtime_error("read_with_timeout(): serial port is not open");
-  }
-  if (size == 0) {
-    return {};
-  }
-
-  std::vector<uint8_t> out(size);
-  const auto deadline = std::chrono::steady_clock::now() + timeout;
-
-  struct State {
-    std::mutex m;
-    std::condition_variable cv;
-    bool completed{false};   // one async op finished
-    bool aborted{false};     // we timed out
-    std::size_t got{0};      // bytes obtained in this op
-  };
-
-  std::size_t offset = 0;
-
-  while (offset < size) {
-    const std::size_t remaining = size - offset;
-    auto state = std::make_shared<State>();
-
-    // Arm one async receive
-    port->async_receive(
-      [state, dst = out.data() + offset, remaining]
-      (std::vector<uint8_t>& buff, const size_t& nbytes)
-      {
-        std::lock_guard<std::mutex> lk(state->m);
-
-        if (state->aborted) {
-          // We timed out; do not touch caller's stack buffers.
-          state->completed = true;
-          state->cv.notify_one();
-          return;
-        }
-
-        state->got = std::min(nbytes, remaining);
-        if (state->got) {
-          std::memcpy(dst, buff.data(), state->got);
-        }
-        state->completed = true;
-        state->cv.notify_one();
-      }
-    );
-
-    std::unique_lock<std::mutex> lk(state->m);
-
-    // Wait for this read to finish or for the overall deadline
-    if (!state->cv.wait_until(lk, deadline, [&]{ return state->completed; })) {
-      // Timeout: prevent the handler from touching stack memory
-      state->aborted = true;
-      lk.unlock();
-
-      // try {
-      //   // Prefer cancel() if available on your SerialPort
-      //   // port->cancel();
-      //   if (port->is_open()) {
-      //     port->close();
-      //   }
-      // } catch (...) {}
-
-      // Give the handler a chance to observe 'aborted' and exit
-      {
-        std::unique_lock<std::mutex> lk2(state->m);
-        state->cv.wait_for(lk2, std::chrono::milliseconds(10));
-      }
-
-      if (port->is_open()) {
-          port->close();
-        }
-      port->open();
-      
-
-      throw std::system_error(std::make_error_code(std::errc::timed_out),
-                              "read_with_timeout(): timed out");
-    }
-
-    // Normal completion path
-    if (state->got == 0) {
-      // Defensive: avoid infinite loops on 0-byte completions
-      throw std::runtime_error("read_with_timeout(): async_receive returned 0 bytes");
-    }
-
-    offset += state->got;
-  }
-
-  return out;
 }
 
 

@@ -16,7 +16,7 @@ def generate_launch_description():
     declared_arguments.append(
         DeclareLaunchArgument(
             "com_port",
-            default_value="/dev/robot/dh_ag95_gripper",
+            default_value="/dev/serial/by-id/usb-FTDI_FT232R_USB_UART_BG004CBE-if00-port0",
             description="COM port of the gripper.",
         )
     )

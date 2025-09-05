@@ -14,7 +14,7 @@
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
-  <depend>serial_driver</depend>
+  <depend>swri_serial_util</depend>
   <depend>asio_cmake_module</depend>
   <depend>ros2_control</depend>
   <depend>ros2_controllers</depend>

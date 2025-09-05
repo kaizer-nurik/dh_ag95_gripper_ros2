@@ -28,15 +28,15 @@
 
 #pragma once
 
-#include "serial_driver/serial_port.hpp"
 
 #include <memory>
 #include <string>
 #include <vector>
 
 #include <dh_gripper_driver/serial.hpp>
-#include "io_context/common.hpp"
-#include "io_context/io_context.hpp"
+
+#include<swri_serial_util/serial_port.h>
+
 namespace serial
 {
 class Serial;
@@ -52,6 +52,7 @@ public:
    * port.
    */
   DefaultSerial();
+  ~DefaultSerial();
 
   void open() override;
 
@@ -71,18 +72,14 @@ public:
   void set_baudrate(uint32_t baudrate) override;
   [[nodiscard]] uint32_t get_baudrate() const override;
 
-  [[nodiscard]] std::vector<uint8_t>
-  read_with_timeout(std::size_t size, std::chrono::milliseconds timeout);
 
 private:
   std::string dev_name = "/dev/ttyS0";
   uint32_t baud = 115200;
-  drivers::serial_driver::FlowControl fc = drivers::serial_driver::FlowControl::NONE;
-  drivers::serial_driver::Parity pt = drivers::serial_driver::Parity::NONE;
-  drivers::serial_driver::StopBits sb = drivers::serial_driver::StopBits::ONE;
+  swri_serial_util::SerialPort port_;
+  bool is_opened = false;
   std::chrono::milliseconds timeout_ms;
-  drivers::common::IoContext ctx;
-  std::unique_ptr<drivers::serial_driver::SerialPort> port;
+  // drivers::common::IoContext ctx;
 
 };
 }  // namespace dh_gripper_driver
